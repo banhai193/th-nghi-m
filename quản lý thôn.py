@@ -294,4 +294,175 @@ if chon_menu == "Trang Tổng Overview & Báo Cáo":
         sl_ho_nghieo = len(get_df_from_sql("SELECT ma_hk FROM ho_dan WHERE dac_diem_ho = 'Hộ nghèo'"))
     else:
         df_count_ho = get_df_from_sql("SELECT ma_hk FROM ho_dan WHERE ten_thon = ?", (thon_hien_tai,))
-        df_count_nk = get_df
+        df_count_nk = get_df_from_sql("SELECT id FROM nhan_khau WHERE ten_thon = ?", (thon_hien_tai,))
+        sl_dang_vien = len(get_df_from_sql("SELECT id FROM nhan_khau WHERE la_dang_vien = 1 AND ten_thon = ?", (thon_hien_tai,)))
+        sl_ho_nghieo = len(get_df_from_sql("SELECT ma_hk FROM ho_dan WHERE dac_diem_ho = 'Hộ nghèo' AND ten_thon = ?", (thon_hien_tai,)))
+        
+    tong_so_ho = len(df_count_ho)
+    tong_so_nk = len(df_count_nk) + tong_so_ho 
+
+    c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+    c_m1.metric("🏠 Tổng số hộ dân", f"{tong_so_ho} hộ")
+    c_m2.metric("👥 Tổng số nhân khẩu", f"{tong_so_nk} người")
+    c_m3.metric("🚩 Tổng số Đảng viên", f"{sl_dang_vien} đồng chí")
+    c_m4.metric("📉 Hộ nghèo", f"{sl_ho_nghieo} hộ")
+    
+    st.write("---")
+    st.subheader("📋 Trích xuất dữ liệu & Báo cáo chuyên đề")
+    
+    tieu_chi_loc = st.selectbox("Chọn nhóm đối tượng cần lập danh sách báo cáo:", [
+        "--- Chọn danh sách cần lập ---",
+        "Toàn bộ các hộ dân",
+        "Danh sách Đảng viên",
+        "Danh sách hộ nghèo / hộ cận nghèo",
+        "Danh sách người cao tuổi (từ 60 tuổi trở lên)",
+        "Danh sách học sinh phổ thông",
+        "Danh sách công dân trong độ tuổi lao động"
+    ])
+    
+    df_kq_loc = pd.DataFrame()
+    where_clause_ho = "" if thon_hien_tai == "Tất cả các thôn" else f"AND ten_thon = '{thon_hien_tai}'"
+    where_clause_nk = "" if thon_hien_tai == "Tất cả các thôn" else f"AND ten_thon = '{thon_hien_tai}'"
+    
+    if tieu_chi_loc == "Toàn bộ các hộ dân":
+        sql = f"SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Mã Hộ Khẩu], ten_chu_ho AS [Họ Tên Chủ Hộ], gioi_tinh_ch AS [Giới Tính CH], nam_sinh_ch AS [Năm Sinh], cccd_ch AS [Số CCCD], sdt_ch AS [Số Điện Thoại], dia_chi AS [Địa Chỉ], dac_diem_ho AS [Phân Loại Hộ] FROM ho_dan WHERE 1=1 {where_clause_ho}"
+        df_kq_loc = get_df_from_sql(sql)
+    elif tieu_chi_loc == "Danh sách Đảng viên":
+        sql = f"SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Thuộc Hộ], ho_ten AS [Họ Tên Đảng Viên], quan_he AS [Quan Hệ Với CH], nam_sinh AS [Năm Sinh], cccd AS [Số CCCD] FROM nhan_khau WHERE la_dang_vien = 1 {where_clause_nk}"
+        df_kq_loc = get_df_from_sql(sql)
+    elif tieu_chi_loc == "Danh sách hộ nghèo / hộ cận nghèo":
+        sql = f"SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Mã Hộ Khẩu], ten_chu_ho AS [Họ Tên Chủ Hộ], sdt_ch AS [Số Điện Thoại], dac_diem_ho AS [Phân Loại] FROM ho_dan WHERE dac_diem_ho IN ('Hộ nghèo', 'Hộ cận nghèo') {where_clause_ho}"
+        df_kq_loc = get_df_from_sql(sql)
+    elif tieu_chi_loc == "Danh sách người cao tuổi (từ 60 tuổi trở lên)":
+        sql = f"SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Thuộc Hộ], ho_ten AS [Họ Tên], gioi_tinh AS [Giới Tính], nam_sinh AS [Năm Sinh] FROM nhan_khau WHERE nguoi_cao_tuoi = 1 {where_clause_nk}"
+        df_kq_loc = get_df_from_sql(sql)
+    elif tieu_chi_loc == "Danh sách học sinh phổ thông":
+        sql = f"SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Thuộc Hộ], ho_ten AS [Họ Tên], gioi_tinh AS [Giới Tính], nam_sinh AS [Năm Sinh] FROM nhan_khau WHERE la_hoc_sinh = 1 {where_clause_nk}"
+        df_kq_loc = get_df_from_sql(sql)
+    elif tieu_chi_loc == "Danh sách công dân trong độ tuổi lao động":
+        sql = f"SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Thuộc Hộ], ho_ten AS [Họ Tên], gioi_tinh AS [Giới Tính], nam_sinh AS [Năm Sinh], nghe_nghiep AS [Nghề Nghiệp Hiện Tại] FROM nhan_khau WHERE trong_tuoi_lao_dong = 1 {where_clause_nk}"
+        df_kq_loc = get_df_from_sql(sql)
+
+    if not df_kq_loc.empty:
+        st.dataframe(df_kq_loc, use_container_width=True)
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_kq_loc.to_excel(writer, index=False, sheet_name='Thong_Ke')
+        st.download_button(label="📥 XUẤT DANH SÁCH RA EXCEL", data=buffer.getvalue(), file_name=f"Bao_cao_{thon_hien_tai}.xlsx", mime="application/vnd.ms-excel")
+
+# ==================== MENU 2: TÌM KIẾM THÔNG MINH ====================
+elif chon_menu == "Tìm Kiếm Thông Minh":
+    st.title("🔍 TRUY VẾT DÂN CƯ TOÀN DIỆN")
+    tu_khoa = st.text_input("Nhập Họ tên, Số CCCD hoặc Số điện thoại cần tra cứu:")
+    
+    if tu_khoa.strip():
+        tk_param = f"%{tu_khoa}%"
+        
+        if thon_hien_tai == "Tất cả các thôn":
+            sql_ch = "SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Mã Hộ Khẩu], ten_chu_ho AS [Họ Tên Chủ Hộ], gioi_tinh_ch AS [Giới Tính], cccd_ch AS [Số CCCD], sdt_ch AS [Số Điện Thoại], dia_chi AS [Địa Chỉ] FROM ho_dan WHERE ten_chu_ho LIKE ? OR cccd_ch LIKE ? OR sdt_ch LIKE ?"
+            df_ch_search = get_df_from_sql(sql_ch, (tk_param, tk_param, tk_param))
+        else:
+            sql_ch = "SELECT ten_thon AS [Thuộc Thôn], ma_hk AS [Mã Hộ Khẩu], ten_chu_ho AS [Họ Tên Chủ Hộ], gioi_tinh_ch AS [Giới Tính], cccd_ch AS [Số CCCD], sdt_ch AS [Số Điện Thoại], dia_chi AS [Địa Chỉ] FROM ho_dan WHERE ten_thon = ? AND (ten_chu_ho LIKE ? OR cccd_ch LIKE ? OR sdt_ch LIKE ?)"
+            df_ch_search = get_df_from_sql(sql_ch, (thon_hien_tai, tk_param, tk_param, tk_param))
+        
+        if thon_hien_tai == "Tất cả các thôn":
+            sql_nk = "SELECT n.ten_thon AS [Thuộc Thôn], n.ma_hk AS [Mã Hộ Khẩu], h.ten_chu_ho AS [Tên Chủ Hộ], n.ho_ten AS [Họ Tên Thành Viên], n.quan_he AS [Quan Hệ Với CH], n.gioi_tinh AS [Giới Tính], n.cccd AS [Số CCCD], n.sdt AS [Số Điện Thoại], (2026 - CAST(n.nam_sinh AS INTEGER)) AS [Tuổi] FROM nhan_khau n LEFT JOIN ho_dan h ON n.ma_hk = h.ma_hk WHERE n.ho_ten LIKE ? OR n.cccd LIKE ? OR n.sdt LIKE ?"
+            df_tv_search = get_df_from_sql(sql_nk, (tk_param, tk_param, tk_param))
+        else:
+            sql_nk = "SELECT n.ten_thon AS [Thuộc Thôn], n.ma_hk AS [Mã Hộ Khẩu], h.ten_chu_ho AS [Tên Chủ Hộ], n.ho_ten AS [Họ Tên Thành Viên], n.quan_he AS [Quan Hệ Với CH], n.gioi_tinh AS [Giới Tính], n.cccd AS [Số CCCD], n.sdt AS [Số Điện Thoại], (2026 - CAST(n.nam_sinh AS INTEGER)) AS [Tuổi] FROM nhan_khau n LEFT JOIN ho_dan h ON n.ma_hk = h.ma_hk WHERE n.ten_thon = ? AND (n.ho_ten LIKE ? OR n.cccd LIKE ? OR n.sdt LIKE ?)"
+            df_tv_search = get_df_from_sql(sql_nk, (thon_hien_tai, tk_param, tk_param, tk_param))
+        
+        if not df_ch_search.empty:
+            st.success("🟢 Tìm thấy thông tin trùng khớp thuộc về nhóm CHỦ HỘ:")
+            st.dataframe(df_ch_search, use_container_width=True)
+            st.write("---")
+            
+        if not df_tv_search.empty:
+            st.success("🔵 Tìm thấy thông tin trùng khớp thuộc về nhóm THÀNH VIÊN HỘ GIA ĐÌNH:")
+            st.dataframe(df_tv_search, use_container_width=True)
+            
+        if df_ch_search.empty and df_tv_search.empty:
+            st.warning("❌ Không tìm thấy kết quả phù hợp với từ khóa trên.")
+
+# ==================== MENU 3: QUẢN LÝ DÂN CƯ ====================
+elif chon_menu == "Quản Lý Hộ Khẩu & Nhân Khẩu":
+    st.title(f"🏠 BIÊN TẬP HỘ TỊCH - {thon_user.upper()}")
+    tab_them_ho, tab_them_thanh_vien = st.tabs(["➕ Đăng Ký Hộ Dân Mới", "👤 Bổ Sung Thành Viên Vào Hộ"])
+    
+    with tab_them_ho:
+        mhk = st.text_input("Mã số hộ khẩu định danh:")
+        tch = st.text_input("Họ và tên chủ hộ:")
+        gt_ch = st.selectbox("Giới tính chủ hộ:", ["Nam", "Nữ"])
+        nsch = st.text_input("Năm sinh chủ hộ:")
+        cccdch = st.text_input("Số CCCD chủ hộ:")
+        sdtch = st.text_input("Số điện thoại liên hệ:")
+        nnch = st.text_input("Nghề nghiệp / Công việc:")
+        dc = st.text_input("Địa chỉ chi tiết:")
+        lh = st.selectbox("Phân loại diện chính sách hộ gia đình:", ["Bình thường", "Hộ nghèo", "Hộ cận nghèo", "Gia đình chính sách"])
+        
+        if st.button("Xác Nhận Lưu Hộ Dân") and mhk.strip() and tch.strip():
+            try:
+                execute_sql("INSERT INTO ho_dan VALUES (?,?,?,?,?,?,?,?,?,?,?)", (mhk, tch, nsch, nnch, cccdch, sdtch, dc, lh, gt_ch, "", thon_user))
+                st.success(f"Đã lưu thành công hộ ông/bà: {tch}")
+            except Exception as e:
+                st.error(f"Lỗi! Mã hộ khẩu/CCCD đã tồn tại: {e}")
+
+    with tab_them_thanh_vien:
+        df_ds_ho = get_df_from_sql("SELECT ma_hk, ten_chu_ho FROM ho_dan WHERE ten_thon = ?", (thon_user,))
+        if not df_ds_ho.empty:
+            dict_ho = {f"Hộ ông/bà: {row['ten_chu_ho']} ({row['ma_hk']})": row['ma_hk'] for _, row in df_ds_ho.iterrows()}
+            lua_chon_ho = st.selectbox("Lựa chọn hộ gia đình nhận thành viên:", list(dict_ho.keys()))
+            ma_hk_target = dict_ho[lua_chon_ho]
+            
+            ht_tv = st.text_input("Họ và tên thành viên:")
+            g_tinh = st.selectbox("Giới tính thành viên:", ["Nam", "Nữ"])
+            qh_tv = st.text_input("Quan hệ với chủ hộ:")
+            ns_tv = st.text_input("Năm sinh (Ví dụ: 1995 hoặc 2015):", key="ns_input_key")
+            
+            if ns_tv.strip().isdigit():
+                tuoi_goi_y = 2026 - int(ns_tv.strip())
+                st.markdown(f"💡 *Hệ thống tính toán: Công dân này **{tuoi_goi_y} tuổi** vào năm 2026.*")
+
+            cccd_tv = st.text_input("Số CCCD:")
+            sdt_tv = st.text_input("Số điện thoại:")
+            nn_tv = st.text_input("Nghề nghiệp:")
+            
+            st.write("📌 **Cán bộ chủ động lựa chọn phân loại diện quản lý của thành viên này:**")
+            col_cb1, col_cb2, col_cb3, col_cb4 = st.columns(4)
+            
+            check_dv = col_cb1.checkbox("Là Đảng viên")
+            check_tv_gia = col_cb2.checkbox("Người cao tuổi (Từ 60 tuổi trở lên)")
+            check_tv_laodong = col_cb3.checkbox("Trong độ tuổi lao động")
+            check_tv_hocsinh = col_cb4.checkbox("Là học sinh phổ thông")
+            
+            if st.button("Xác Nhận Thêm Nhân Khẩu") and ht_tv.strip():
+                v_dv = 1 if check_dv else 0
+                v_gia = 1 if check_tv_gia else 0
+                v_laodong = 1 if check_tv_laodong else 0
+                v_hocsinh = 1 if check_tv_hocsinh else 0
+                
+                try:
+                    execute_sql("""
+                        INSERT INTO nhan_khau (ma_hk, ho_ten, quan_he, nam_sinh, nghe_nghiep, cccd, sdt, la_dang_vien, di_lam_xa, nguoi_cao_tuoi, gioi_tinh, trong_tuoi_lao_dong, la_hoc_sinh, ten_thon)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (ma_hk_target, ht_tv, qh_tv, ns_tv.strip(), nn_tv, cccd_tv, sdt_tv, v_dv, 0, v_gia, g_tinh, v_laodong, v_hocsinh, thon_user))
+                    st.success(f"🎉 Đã thêm thành công thành viên {ht_tv}!")
+                except Exception as e:
+                    st.error(f"Lỗi thêm nhân khẩu: {e}")
+        else:
+            st.info("Thôn chưa có dữ liệu hộ dân nào. Vui lòng tạo hộ dân trước.")
+
+# ==================== MENU 4: TẠM TRÚ TẠM VẮNG ====================
+elif chon_menu == "Quản Lý Tạm Trú / Tạm Vắng":
+    st.title(f"📝 SỔ BIẾN ĐỘNG CƯ TRÚ - {thon_user.upper()}")
+    with st.form("form_cu_tru"):
+        ten_nguoi_khai = st.text_input("Họ và tên người biến động cư trú:")
+        cccd_nguoi_khai = st.text_input("Số căn cước công dân (CCCD):")
+        loai_hinh_bd = st.selectbox("Hình thức khai báo cư trú:", ["Tạm trú (Người mới đến sinh sống)", "Tạm vắng (Người đi khỏi địa phương)"])
+        thoi_gian_di_den = st.text_input("Thời gian cư trú thay đổi:")
+        noi_di_den_chi_tiet = st.text_input("Nơi xuất phát chuyển đi / Nơi đến cụ thể:")
+        ly_do_bien_dong = st.text_area("Lý do thay đổi cư trú:")
+        
+        if st.form_submit_button("Xác Nhận Đăng Ký") and ten_nguoi_khai.strip():
+            execute_sql("INSERT INTO tam_tru_tam_vang (ho_ten, cccd, loai_bien_dong, thoi_gian, noi_di_den, ly_do, ten_thon) VALUES (?, ?, ?, ?, ?, ?, ?)", (ten_nguoi_khai, cccd_nguoi_khai, loai_hinh_bd, thoi_gian_di_den, noi_di_den_chi_tiet, ly_do_bien_dong, thon_user))
+            st.success("Đã cập nhật sổ cư trú thành công!")
